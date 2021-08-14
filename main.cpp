@@ -1,3 +1,14 @@
+// Currently, I have dynamic shader compilation working on Windows, but not on
+// macOS.  If this is set to 0, you must do the following before executing:
+// glslc shader.vert -o vert.spv
+// glslc shader.frag -o frag.spv
+#ifdef __APPLE__
+#define PHALANX_DYNAMIC_SHADER_COMPILATION 0
+#else
+#define PHALANX_DYNAMIC_SHADER_COMPILATION 1
+#endif
+
+
 #include "renderer.h"
 #include "window_handler.h"
 
@@ -23,23 +34,35 @@ void maybeLogFPS() {
 
 
 
+constexpr double pi = 3.14159265358979323846;
+constexpr double one_twenty = 2 * pi / 3;
+constexpr double two_forty = 2 * one_twenty;
+
+double calculateAngle(std::chrono::microseconds frameDuration) {
+	// the triangle should do a full rotation every 5 seconds
+	return 2 * pi * frameDuration.count() / (5 * 1000000);
+}
+
+
+
 int main() {
 	// for maybeLogFPS
 	lastPrintTime = std::chrono::steady_clock::now();
 
-	uint32_t spinFactor = 0;
-	double pi = 3.14159265358979323846;
-
-	double one_twenty = 2 * pi / 3;
-	double two_forty = 2 * one_twenty;
+	auto lastFrameTime = std::chrono::steady_clock::now();
+	double angle = 0.0;
 
 	try {
 		WindowHandler windowHandler{};
 		Renderer renderer(&windowHandler);
 
 		while (renderer.isRunning()) {
-			float angle = spinFactor / 2000.0;
-			spinFactor++;
+			auto now = std::chrono::steady_clock::now();
+			auto frameDuration =
+					std::chrono::duration_cast<std::chrono::microseconds>(now - lastFrameTime);
+			lastFrameTime = now;
+
+			angle += calculateAngle(frameDuration);
 
 			// make it spin!
 			vertices[0].pos.x = sin(angle);

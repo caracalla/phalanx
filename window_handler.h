@@ -79,14 +79,10 @@ struct WindowHandler {
 	}
 
 	bool shouldRecreateSwapchain() {
-		if (shouldRecreateSwapChain_) {
-			std::cout << "it's true\n";
-		}
 		return shouldRecreateSwapChain_;
 	}
 
 	void resetShouldRecreateSwapchain() {
-		std::cout << "resetting the value\n";
 		shouldRecreateSwapChain_ = false;
 	}
 

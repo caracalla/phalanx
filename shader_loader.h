@@ -1,6 +1,8 @@
 #pragma once
 
+#if PHALANX_DYNAMIC_SHADER_COMPILATION == 1
 #include <shaderc/shaderc.hpp>
+#endif // PHALANX_DYNAMIC_SHADER_COMPILATION == 1
 
 #include <fstream>
 #include <iostream>
@@ -27,6 +29,7 @@ static std::vector<char> readFile(const std::string& filename) {
 	return buffer;
 }
 
+#if PHALANX_DYNAMIC_SHADER_COMPILATION == 1
 // we compile shaders on the fly, before rendering begins
 std::vector<char> loadShader(
 	const std::string& shaderFileName,
@@ -74,3 +77,4 @@ std::vector<char> loadVertexShader(const std::string& shaderFileName) {
 std::vector<char> loadFragmentShader(const std::string& shaderFileName) {
 	return loadShader(shaderFileName, shaderc_glsl_default_fragment_shader);
 }
+#endif // PHALANX_DYNAMIC_SHADER_COMPILATION == 1

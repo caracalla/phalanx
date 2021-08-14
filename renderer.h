@@ -12,7 +12,7 @@
 #include "window_handler.h"
 
 #include <algorithm>
-#include <array>f
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -129,7 +129,10 @@ const std::vector<const char*> kValidationLayers = {
 };
 
 const std::vector<const char*> kDeviceExtensions = {
-	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+#ifdef __APPLE__
+	"VK_KHR_portability_subset"
+#endif
 };
 
 
@@ -472,6 +475,13 @@ struct Renderer {
 			// the VK_EXT_debug_utils extension allows us to set up the debugMessenger
 			requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
+
+		// When getting this working on my M1 macOS device, I got a validation
+		// layer warning about needing this extension.  This post has more details:
+		// https://stackoverflow.com/questions/66659907/vulkan-validation-warning-catch-22-about-vk-khr-portability-subset-on-moltenvk
+#ifdef __APPLE__
+		requiredExtensions.push_back("VK_KHR_get_physical_device_properties2");
+#endif
 
 		// print required extensions
 		std::cout << "\n\n";
@@ -1066,10 +1076,13 @@ struct Renderer {
 	void createGraphicsPipeline() {
 		// set up vertex and fragment shaders
 
-		// std::vector<char> vertShaderIRCode = readFile("vert.spv");
-		// std::vector<char> fragShaderIRCode = readFile("frag.spv");
+#if PHALANX_DYNAMIC_SHADER_COMPILATION == 1
 		std::vector<char> vertShaderIRCode = loadVertexShader("shader.vert");
 		std::vector<char> fragShaderIRCode = loadFragmentShader("shader.frag");
+#else
+		std::vector<char> vertShaderIRCode = readFile("vert.spv");
+		std::vector<char> fragShaderIRCode = readFile("frag.spv");
+#endif // PHALANX_DYNAMIC_SHADER_COMPILATION == 1
 
 		VkShaderModule vertShaderModule = createShaderModule(vertShaderIRCode);
 		VkShaderModule fragShaderModule = createShaderModule(fragShaderIRCode);
