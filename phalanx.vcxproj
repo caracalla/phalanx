@@ -161,10 +161,13 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="compile_shaders.bat" />
+    <None Include="shader.frag" />
+    <None Include="shader.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="renderer.h" />
     <ClInclude Include="shader_loader.h" />
+    <ClInclude Include="vertex.h" />
     <ClInclude Include="window_handler.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

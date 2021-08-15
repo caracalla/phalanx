@@ -1,18 +1,12 @@
 #pragma once
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-// #include <glm/vec4.hpp>
-// #include <glm/mat4x4.hpp>
-#include <glm/glm.hpp>
-
 #include <vulkan/vulkan.h>
 
 #include "shader_loader.h"
+#include "vertex.h"
 #include "window_handler.h"
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -21,53 +15,6 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
-
-
-/******************************************************************************
- *
- * VERTEX CLASS
- *
- *****************************************************************************/
-
-struct Vertex {
-	glm::vec2 pos;
-	glm::vec3 color;
-
-	// bindings describe the spacing between data and whether the data is per-
-	// vertex or per-instance
-	static VkVertexInputBindingDescription getBindingDescription() {
-		VkVertexInputBindingDescription bindingDescription{};
-		bindingDescription.binding = 0;
-		bindingDescription.stride = sizeof(Vertex);
-		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-		return bindingDescription;
-	}
-
-	// attributes describe the type of attributes passed to the vertex shader,
-	// which binding to load the from, and at which offset
-	static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
-		attributeDescriptions[0].binding = 0;
-		attributeDescriptions[0].location = 0;
-		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-		attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-		attributeDescriptions[1].binding = 0;
-		attributeDescriptions[1].location = 1;
-		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-		return attributeDescriptions;
-	}
-};
-
-std::vector<Vertex> vertices = {
-	{{ 0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	{{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}}
-};
-
 
 
 /******************************************************************************
@@ -166,8 +113,9 @@ struct SwapChainSupportDetails {
 
 
 struct Renderer {
-	Renderer(WindowHandler* windowHandler) {
+	Renderer(WindowHandler* windowHandler, std::vector<Vertex>* vertices) {
 		this->windowHandler_ = windowHandler;
+		this->vertices_ = vertices;
 		this->initVulkan();
 	}
 
@@ -214,8 +162,8 @@ struct Renderer {
 				VK_TRUE, // wait for all fences to be finished, although we're only passing in one here
 				UINT64_MAX);
 
-		size_t memSize = sizeof(vertices[0]) * vertices.size();
-		memcpy(vertexData_, vertices.data(), memSize);
+		size_t memSize = sizeof((*vertices_)[0]) * vertices_->size();
+		memcpy(vertexData_, vertices_->data(), memSize);
 
 		uint32_t imageIndex;
 		VkResult acquireImageResult = vkAcquireNextImageKHR(
@@ -228,7 +176,7 @@ struct Renderer {
 
 		if (acquireImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
 			// not possible to present to an out-of-date swap chain, so recreate
-			// and try again
+			// and try again on the next frame
 			this->recreateSwapChain("swap chain out of date when acquiring image");
 			return;
 		} else if (
@@ -739,7 +687,8 @@ struct Renderer {
 			createInfo.enabledLayerCount = 0;
 		}
 
-		if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &logicalDevice_) != VK_SUCCESS) {
+		if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &logicalDevice_)
+				!= VK_SUCCESS) {
 			throw std::runtime_error("failed to create logical device");
 		}
 
@@ -1325,6 +1274,7 @@ struct Renderer {
 		VkPhysicalDeviceMemoryProperties memProperties;
 		vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memProperties);
 
+		// we're not dealing with selecting a heap right now, just a memory type
 		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
 			bool typeMatches = typeFilter & (1 << i);
 			bool propertiesMatch =
@@ -1338,62 +1288,89 @@ struct Renderer {
 		throw std::runtime_error("failed to find suitable memory type");
 	}
 
-	void* vertexData_;
-
-	void createVertexBuffer() {
+	void createBufferAndAllocateMemory(
+			VkDeviceSize bufferSize,
+			VkBufferUsageFlags usageFlags,
+			VkMemoryPropertyFlags desiredMemoryProperties,
+			VkBuffer& buffer,
+			VkDeviceMemory& bufferMemory) {
 		VkBufferCreateInfo bufferInfo{};
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.size = sizeof(vertices[0]) * vertices.size();
-		bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		bufferInfo.size = bufferSize;
+		bufferInfo.usage = usageFlags;
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // this will be used exclusively by the graphics queue
 
 		if (
-				vkCreateBuffer(logicalDevice_, &bufferInfo, nullptr, &vertexBuffer_) !=
-				VK_SUCCESS) {
+				vkCreateBuffer(logicalDevice_, &bufferInfo, nullptr, &buffer) !=
+						VK_SUCCESS) {
 			throw std::runtime_error("failed to create vertex buffer");
 		}
 
 		VkMemoryRequirements memRequirements;
-		vkGetBufferMemoryRequirements(
-				logicalDevice_, vertexBuffer_, &memRequirements);
-
-		VkMemoryPropertyFlags desiredProperties =
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+		vkGetBufferMemoryRequirements(logicalDevice_, buffer, &memRequirements);
 
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = this->findMemoryType(
-				memRequirements.memoryTypeBits, desiredProperties);
+				memRequirements.memoryTypeBits, // memoryTypeBits is a bit field of the memory types that are suitable for the buffer
+				desiredMemoryProperties);
 
 		if (
 				vkAllocateMemory(
 						logicalDevice_,
 						&allocInfo,
 						nullptr,
-						&vertexBufferMemory_) != VK_SUCCESS) {
-			throw std::runtime_error("failed to allocate vertex buffer memory");
+						&bufferMemory) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate buffer memory");
 		}
 
 		vkBindBufferMemory(
 				logicalDevice_,
+				buffer,
+				bufferMemory,
+				0); // offset within the region of memory (if the offset is nonzero, it must be divisible by memRequirements.alignment)
+	}
+
+	void createVertexBuffer() {
+		VkDeviceSize bufferSize = sizeof((*vertices_)[0]) * vertices_->size();
+		VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		VkMemoryPropertyFlags desiredMemoryProperties =
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | // we want memory we can map so we can write it from the CPU
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT; // use a memory heap that is host coherent, to avoid inconsistency between the mapped and allocated memory
+
+		createBufferAndAllocateMemory(
+				bufferSize,
+				usageFlags,
+				desiredMemoryProperties,
 				vertexBuffer_,
-				vertexBufferMemory_,
-				0); // offset within region of memory
+				vertexBufferMemory_);
 
+		// the following was used to copy over the vertex buffer once
+		// since the triangle is now spinning, we now copy it over once per frame
 		// void* data;
-		vkMapMemory(
-				logicalDevice_,
-				vertexBufferMemory_,
-				0, // offset
-				bufferInfo.size,
-				0, // flags
-				&vertexData_);
+		//
+		// access a region of the specified memory resource as defined by an offset and size
+		// vkMapMemory(
+		// 		logicalDevice_,
+		// 		vertexBufferMemory_,
+		// 		0, // offset
+		// 		bufferInfo.size, // size
+		// 		0, // flags
+		// 		&data);
 
-		// memcpy(data, vertices.data(), (size_t)bufferInfo.size);
+		// memcpy(data, vertices_->data(), (size_t)bufferInfo.size);
 
 		// vkUnmapMemory(logicalDevice_, vertexBufferMemory_);
+
+
+		vkMapMemory(
+			logicalDevice_,
+			vertexBufferMemory_,
+			0, // offset
+			bufferSize, // size
+			0, // flags
+			&vertexData_);
 	}
 
 	// **************************************************************************
@@ -1443,6 +1420,7 @@ struct Renderer {
 			vkCmdBindPipeline(
 					commandBuffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline_);
 
+			// bind the vertex buffer to the command buffer
 			VkBuffer vertexBuffers[] = { vertexBuffer_ };
 			VkDeviceSize offsets[] = { 0 };
 			vkCmdBindVertexBuffers(
@@ -1450,11 +1428,11 @@ struct Renderer {
 					0, // offset
 					1, // number of bindings
 					vertexBuffers,
-					offsets);
+					offsets); // byte offsets to start vertex reading data from
 
 			vkCmdDraw(
 					commandBuffers_[i],
-					static_cast<uint32_t>(vertices.size()), // vertex count
+					static_cast<uint32_t>(vertices_->size()), // vertex count
 					1, // instance count (not using instanced rendering here)
 					0, // first vertex
 					0); // first instance
@@ -1545,9 +1523,6 @@ struct Renderer {
 	VkCommandPool commandPool_;
 	std::vector<VkCommandBuffer> commandBuffers_;
 
-	VkBuffer vertexBuffer_;
-	VkDeviceMemory vertexBufferMemory_;
-
 	std::vector<VkSemaphore> imageAvailableSemaphores_;
 	std::vector<VkSemaphore> renderFinishedSemaphores_;
 
@@ -1555,4 +1530,13 @@ struct Renderer {
 	std::vector<VkFence> imagesInFlight_;
 
 	size_t currentFrame_ = 0;
+
+	// original vertex data, provided by the instance owner
+	std::vector<Vertex>* vertices_;
+	// device-side vertex data, resident in vertexBufferMemory_
+	VkBuffer vertexBuffer_;
+	// allocated device memory
+	VkDeviceMemory vertexBufferMemory_;
+	// pointer to mapped buffer CPU accessible memory (see createVertexBuffer() and drawFrame())
+	void* vertexData_;
 };

@@ -10,11 +10,13 @@
 
 
 #include "renderer.h"
+#include "vertex.h"
 #include "window_handler.h"
 
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 
 uint32_t fps = 0;
@@ -40,7 +42,8 @@ constexpr double two_forty = 2 * one_twenty;
 
 double calculateAngle(std::chrono::microseconds frameDuration) {
 	// the triangle should do a full rotation every 5 seconds
-	return 2 * pi * frameDuration.count() / (5 * 1000000);
+	constexpr int FIVE_SECONDS = 5 * 1000000;
+	return 2 * pi * frameDuration.count() / FIVE_SECONDS;
 }
 
 
@@ -52,9 +55,15 @@ int main() {
 	auto lastFrameTime = std::chrono::steady_clock::now();
 	double angle = 0.0;
 
+	std::vector<Vertex> vertices = {
+		{{ 0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}}
+	};
+
 	try {
 		WindowHandler windowHandler{};
-		Renderer renderer(&windowHandler);
+		Renderer renderer(&windowHandler, &vertices);
 
 		while (renderer.isRunning()) {
 			auto now = std::chrono::steady_clock::now();
