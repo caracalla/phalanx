@@ -7,5 +7,9 @@ phalanx:
 clean:
 	rm -f phalanx
 
-run: clean phalanx
+shaders:
+	glslc shader.frag -o frag.spv
+	glslc shader.vert -o vert.spv
+
+run: clean phalanx shaders
 	./phalanx

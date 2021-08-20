@@ -2,7 +2,6 @@
 
 My first Vulkan renderer, based on the [Vulkan tutorial](https://vulkan-tutorial.com/).  I've tacked on some additional features for fun:
 * dynamic shader recompilation when the R key is pressed (Windows only)
-* the triangle spins
 
 ## Setup
 ### macOS

@@ -6,3 +6,7 @@
 /x64
 /.vs/phalanx/v16
 .vscode
+
+phalanx
+vert.spv
+frag.spv

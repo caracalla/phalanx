@@ -56,32 +56,43 @@ int main() {
 	double angle = 0.0;
 
 	std::vector<Vertex> vertices = {
-		{{ 0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-		{{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}}
+		// original triangle
+		// {{ 0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // top
+		// {{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}}, // right
+		// {{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}} // left
+
+		// new rectangle
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // top left
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}}, // top right
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}, // bottom right
+		// {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}, // bottom right
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}, // bottom left
+		// {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // top left
 	};
+
+	std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
 
 	try {
 		WindowHandler windowHandler{};
-		Renderer renderer(&windowHandler, &vertices);
+		Renderer renderer(&windowHandler, &vertices, &indices);
 
 		while (renderer.isRunning()) {
-			auto now = std::chrono::steady_clock::now();
-			auto frameDuration =
-					std::chrono::duration_cast<std::chrono::microseconds>(now - lastFrameTime);
-			lastFrameTime = now;
+			// auto now = std::chrono::steady_clock::now();
+			// auto frameDuration =
+			// 		std::chrono::duration_cast<std::chrono::microseconds>(now - lastFrameTime);
+			// lastFrameTime = now;
 
-			angle += calculateAngle(frameDuration);
+			// angle += calculateAngle(frameDuration);
 
-			// make it spin!
-			vertices[0].pos.x = sin(angle);
-			vertices[0].pos.y = cos(angle);
+			// // make it spin!
+			// vertices[0].pos.x = sin(angle);
+			// vertices[0].pos.y = cos(angle);
 
-			vertices[1].pos.x = sin(angle + two_forty);
-			vertices[1].pos.y = cos(angle + two_forty);
+			// vertices[1].pos.x = sin(angle + two_forty);
+			// vertices[1].pos.y = cos(angle + two_forty);
 
-			vertices[2].pos.x = sin(angle + one_twenty);
-			vertices[2].pos.y = cos(angle + one_twenty);
+			// vertices[2].pos.x = sin(angle + one_twenty);
+			// vertices[2].pos.y = cos(angle + one_twenty);
 
 			windowHandler.pollEvents();
 			renderer.draw();
