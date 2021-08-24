@@ -10,6 +10,7 @@
 struct Vertex {
 	glm::vec2 pos;
 	glm::vec3 color;
+	glm::vec2 texCoord;
 
 	// bindings describe the spacing between data and whether the data is per-
 	// vertex or per-instance
@@ -24,8 +25,9 @@ struct Vertex {
 
 	// attributes describe the type of attributes passed to the vertex shader,
 	// which binding to load the from, and at which offset
-	static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+	static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
+		std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+
 		// position is specified as a vec2 of signed floats
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
@@ -37,6 +39,12 @@ struct Vertex {
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 		attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+		// texture coordinate is a vec2 of signed floats
+		attributeDescriptions[2].binding = 0;
+		attributeDescriptions[2].location = 2;
+		attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 
 		// ivec2: VK_FORMAT_R32G32_SINT, a 2-component vector of 32-bit signed integers
 		// uvec4 : VK_FORMAT_R32G32B32A32_UINT, a 4-component vector of 32-bit unsigned integers
