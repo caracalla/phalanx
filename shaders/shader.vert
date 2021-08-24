@@ -7,7 +7,7 @@ layout(binding = 0) uniform UniformBufferObject {
 	mat4 projection;
 } ubo;
 
-layout(location = 0) in vec2 inPosition;
+layout(location = 0) in vec3 inPosition;
 // if inPosition was something like a dvec3 64 bit vector, it would use two
 // slots insteaad of one, and inColor would need to be at location = 2
 // (does that mean the max size of a "location" is 128 bits?
@@ -29,7 +29,7 @@ void main() {
 
 	// gl_Position = vec4(inPosition, 0.0, 1.0);
 	gl_Position =
-			ubo.projection * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0);
+			ubo.projection * ubo.view * ubo.model * vec4(inPosition, 1.0);
 
 	fragColor = inColor;
 	fragTexCoord = inTexCoord;

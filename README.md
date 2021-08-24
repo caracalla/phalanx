@@ -15,3 +15,9 @@ Follow the directions at the [Vulkan tutorial environment setup for Windows](htt
 
 ## Namesake
 I named this after the Phalanx CIWS, for no particular reason.
+
+## Topics for further investigation
+* [texels](https://en.wikipedia.org/wiki/Texel_(graphics))
+* [best practice validation](https://vulkan.lunarg.com/doc/view/1.1.126.0/windows/best_practices.html)
+* what even is a descriptor set?  or even a descriptor?
+* what is the color attachment?  it's the swap chain image?

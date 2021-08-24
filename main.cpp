@@ -61,14 +61,23 @@ int main() {
 		// {{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}}, // right
 		// {{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}} // left
 
-		// new rectangle
-		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
-		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
-		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom right
-		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}} // bottom left
+		// first rectangle
+		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
+		{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
+		{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom right
+		{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}, // bottom left
+
+		// second rectangle
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
+		{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
+		{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom right
+		{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}} // bottom left
 	};
 
-	std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
+	std::vector<uint16_t> indices = {
+		0, 1, 2, 2, 3, 0, // first rectangle
+		4, 5, 6, 6, 7, 4 // second rectangle
+	};
 
 	try {
 		WindowHandler windowHandler{};
