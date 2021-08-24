@@ -1,6 +1,9 @@
 #pragma once
 
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -97,10 +100,13 @@ const std::vector<const char*> kDeviceExtensions = {
  *
  *****************************************************************************/
 
+// each element should be 16 byte aligned (?)
+// define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES before including glm to
+// automatically correct alignments (does not workf for nested structs)
 struct UniformBufferObject {
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 projection;
+	alignas(16) glm::mat4 model;
+	alignas(16) glm::mat4 view;
+	alignas(16) glm::mat4 projection;
 };
 
 struct QueueFamilyIndices {
@@ -143,12 +149,15 @@ struct Renderer {
 		this->pickPhysicalDevice();
 		this->createLogicalDevice();
 		this->createSwapChain();
-		this->createImageViews();
+		this->createSwapChainImageViews();
 		this->createRenderPass();
 		this->createDescriptorSetLayout();
 		this->createGraphicsPipeline();
 		this->createFrameBuffers();
 		this->createCommandPool();
+		this->createTextureImage();
+		this->createTextureImageView();
+		this->createTextureSampler();
 		this->createVertexBuffer();
 		this->createIndexBuffer();
 		this->createUniformBuffers();
@@ -222,7 +231,7 @@ struct Renderer {
 
 		imagesInFlight_[imageIndex] = inFlightFences_[currentFrame_];
 
-		updateUniformBuffer(imageIndex);
+		this->updateUniformBuffer(imageIndex);
 
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -297,7 +306,14 @@ struct Renderer {
 
 		this->cleanupSwapChain();
 
-		vkDestroyDescriptorSetLayout(logicalDevice_, descriptorSetLayout_, nullptr);
+		vkDestroySampler(logicalDevice_, textureSampler_, nullptr);
+		vkDestroyImageView(logicalDevice_, textureImageView_, nullptr);
+
+		vkDestroyImage(logicalDevice_, textureImage_, nullptr);
+		vkFreeMemory(logicalDevice_, textureImageMemory_, nullptr);
+
+		vkDestroyDescriptorSetLayout(
+				logicalDevice_, descriptorSetLayout_, nullptr);
 
 		vkDestroyBuffer(logicalDevice_, indexBuffer_, nullptr);
 		vkFreeMemory(logicalDevice_, indexBufferMemory_, nullptr);
@@ -306,8 +322,10 @@ struct Renderer {
 		vkFreeMemory(logicalDevice_, vertexBufferMemory_, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			vkDestroySemaphore(logicalDevice_, renderFinishedSemaphores_[i], nullptr);
-			vkDestroySemaphore(logicalDevice_, imageAvailableSemaphores_[i], nullptr);
+			vkDestroySemaphore(
+					logicalDevice_, renderFinishedSemaphores_[i], nullptr);
+			vkDestroySemaphore(
+					logicalDevice_, imageAvailableSemaphores_[i], nullptr);
 			vkDestroyFence(logicalDevice_, inFlightFences_[i], nullptr);
 		}
 
@@ -575,8 +593,8 @@ struct Renderer {
 		// VkPhysicalDeviceProperties deviceProperties;
 		// vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
-		// VkPhysicalDeviceFeatures deviceFeatures;
-		// vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+		VkPhysicalDeviceFeatures supportedFeatures;
+		vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
 		// return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
 		// 		deviceFeatures.geometryShader;
@@ -593,7 +611,10 @@ struct Renderer {
 					!swapChainSupport.presentModes.empty();
 		}
 
-		return indices.isComplete() && extensionsSupported && swapChainAdequate;
+		return indices.isComplete() &&
+				extensionsSupported &&
+				swapChainAdequate &&
+				supportedFeatures.samplerAnisotropy;
 	}
 
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
@@ -690,13 +711,14 @@ struct Renderer {
 			queueCreateInfos.push_back(queueCreateInfo);
 		}
 
-		VkPhysicalDeviceFeatures deviceFeatures{};
+		VkPhysicalDeviceFeatures enabledDeviceFeatures{};
+		enabledDeviceFeatures.samplerAnisotropy = VK_TRUE;
 
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		createInfo.pQueueCreateInfos = queueCreateInfos.data();
-		createInfo.pEnabledFeatures = &deviceFeatures;
+		createInfo.pEnabledFeatures = &enabledDeviceFeatures;
 
 		createInfo.enabledExtensionCount =
 				static_cast<uint32_t>(kDeviceExtensions.size());
@@ -951,7 +973,7 @@ struct Renderer {
 		this->cleanupSwapChain();
 
 		this->createSwapChain();
-		this->createImageViews(); // based directly on swap chain images
+		this->createSwapChainImageViews(); // based directly on swap chain images
 		this->createRenderPass(); // depends on swap chain format (probably won't change, but handle it anyways)
 		this->createGraphicsPipeline(); // depends on viewport and scissor sizes (unless using dynamic state)
 		this->createFrameBuffers(); // depends on swap chain images
@@ -966,34 +988,43 @@ struct Renderer {
 	// * Image Views
 	// **************************************************************************
 
-	void createImageViews() {
+	void createSwapChainImageViews() {
 		swapChainImageViews_.resize(swapChainImages_.size());
 
 		for (size_t i = 0; i < swapChainImages_.size(); i++) {
-			VkImageViewCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			createInfo.image = swapChainImages_[i];
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			createInfo.format = swapChainImageFormat_;
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			createInfo.subresourceRange.baseMipLevel = 0;
-			createInfo.subresourceRange.levelCount = 1;
-			createInfo.subresourceRange.baseArrayLayer = 0;
-			createInfo.subresourceRange.layerCount = 1;
-
-			if (
-					vkCreateImageView(
-							logicalDevice_,
-							&createInfo,
-							nullptr,
-							&swapChainImageViews_[i]) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create image views");
-			}
+			swapChainImageViews_[i] = this->createImageView(
+					swapChainImages_[i], swapChainImageFormat_);
 		}
+	}
+
+	VkImageView createImageView(VkImage image, VkFormat format) {
+		VkImageViewCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		createInfo.image = image;
+		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		createInfo.format = format;
+		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		createInfo.subresourceRange.baseMipLevel = 0;
+		createInfo.subresourceRange.levelCount = 1;
+		createInfo.subresourceRange.baseArrayLayer = 0;
+		createInfo.subresourceRange.layerCount = 1;
+
+		VkImageView imageView;
+
+		if (
+				vkCreateImageView(
+						logicalDevice_,
+						&createInfo,
+						nullptr,
+						&imageView) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture image view");
+		}
+
+		return imageView;
 	}
 
 	// **************************************************************************
@@ -1064,11 +1095,11 @@ struct Renderer {
 		// set up vertex and fragment shaders
 
 #if PHALANX_DYNAMIC_SHADER_COMPILATION == 1
-		std::vector<char> vertShaderIRCode = loadVertexShader("shader.vert");
-		std::vector<char> fragShaderIRCode = loadFragmentShader("shader.frag");
+		std::vector<char> vertShaderIRCode = loadVertexShader("shaders/shader.vert");
+		std::vector<char> fragShaderIRCode = loadFragmentShader("shaders/shader.frag");
 #else
-		std::vector<char> vertShaderIRCode = readFile("vert.spv");
-		std::vector<char> fragShaderIRCode = readFile("frag.spv");
+		std::vector<char> vertShaderIRCode = readFile("shaders/vert.spv");
+		std::vector<char> fragShaderIRCode = readFile("shaders/frag.spv");
 #endif // PHALANX_DYNAMIC_SHADER_COMPILATION == 1
 
 		VkShaderModule vertShaderModule = createShaderModule(vertShaderIRCode);
@@ -1372,23 +1403,7 @@ struct Renderer {
 
 	void copyBuffer(
 			VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize bufferSize) {
-		// create a temporary command buffer to perform the copy
-		// we could use a separate command pool, because the implementation may be
-		// able to apply memory allocation optimizations for short-lived buffers
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = commandPool_;
-		allocInfo.commandBufferCount = 1;
-
-		VkCommandBuffer tempCommandBuffer;
-		vkAllocateCommandBuffers(logicalDevice_, &allocInfo, &tempCommandBuffer);
-
-		VkCommandBufferBeginInfo beginInfo{};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; // we'll only be using this command buffer once, and wait until the copy has finished to return from this function
-
-		vkBeginCommandBuffer(tempCommandBuffer, &beginInfo);
+		VkCommandBuffer tempCommandBuffer = this->createSingleUseTempCommandBuffer();
 
 		VkBufferCopy copyRegion{};
 		copyRegion.srcOffset = 0; // optional
@@ -1397,17 +1412,7 @@ struct Renderer {
 
 		vkCmdCopyBuffer(tempCommandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-		vkEndCommandBuffer(tempCommandBuffer);
-
-		VkSubmitInfo submitInfo{};
-		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &tempCommandBuffer;
-
-		vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE);
-		vkQueueWaitIdle(graphicsQueue_);
-
-		vkFreeCommandBuffers(logicalDevice_, commandPool_, 1, &tempCommandBuffer);
+		this->endSingleUseTempCommandBuffer(tempCommandBuffer);
 	}
 
 	void createVertexBuffer() {
@@ -1421,7 +1426,7 @@ struct Renderer {
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
 
-		createBufferAndAllocateMemory(
+		this->createBufferAndAllocateMemory(
 				bufferSize,
 				stagingBufferUsageFlags,
 				stagingBufferDesiredMemoryProperties,
@@ -1450,14 +1455,14 @@ struct Renderer {
 		VkMemoryPropertyFlags vertexBufferDesiredMemoryProperties =
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT; // we want memory that is only accessible from the device (can't be mapped)
 
-		createBufferAndAllocateMemory(
+		this->createBufferAndAllocateMemory(
 				bufferSize,
 				vertexBufferUsageFlags,
 				vertexBufferDesiredMemoryProperties,
 				vertexBuffer_,
 				vertexBufferMemory_);
 
-		copyBuffer(stagingBuffer, vertexBuffer_, bufferSize);
+		this->copyBuffer(stagingBuffer, vertexBuffer_, bufferSize);
 
 		// clean up staging buffer
 		vkDestroyBuffer(logicalDevice_, stagingBuffer, nullptr);
@@ -1474,7 +1479,7 @@ struct Renderer {
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
 
-		createBufferAndAllocateMemory(
+		this->createBufferAndAllocateMemory(
 				bufferSize,
 				stagingBufferUsageFlags,
 				stagingBufferDesiredMemoryProperties,
@@ -1503,14 +1508,14 @@ struct Renderer {
 		VkMemoryPropertyFlags indexBufferDesiredMemoryProperties =
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT; // we want memory that is only accessible from the device (can't be mapped)
 
-		createBufferAndAllocateMemory(
+		this->createBufferAndAllocateMemory(
 				bufferSize,
 				indexBufferUsageFlags,
 				indexBufferDesiredMemoryProperties,
 				indexBuffer_,
 				indexBufferMemory_);
 
-		copyBuffer(stagingBuffer, indexBuffer_, bufferSize);
+		this->copyBuffer(stagingBuffer, indexBuffer_, bufferSize);
 
 		// clean up staging buffer
 		vkDestroyBuffer(logicalDevice_, stagingBuffer, nullptr);
@@ -1529,7 +1534,7 @@ struct Renderer {
 		uniformBuffersMemory_.resize(swapChainImages_.size());
 
 		for (size_t i = 0; i < swapChainImages_.size(); i++) {
-			createBufferAndAllocateMemory(
+			this->createBufferAndAllocateMemory(
 					bufferSize,
 					usageFlags,
 					desiredMemoryProperties,
@@ -1688,8 +1693,8 @@ struct Renderer {
 
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = commandPool_;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; // submitted to queue directly, can't be called from other command buffers
+		allocInfo.commandPool = commandPool_;
 		allocInfo.commandBufferCount = (uint32_t)commandBuffers_.size();
 
 		if (
@@ -1777,6 +1782,47 @@ struct Renderer {
 		}
 	}
 
+	// all uses of this execute synchronously by waiting for the queue to become
+	// idle.  we should combine these operations into a single command buffer and
+	// execute them asynchronously
+	// TODO: create setupCommandBuffer() and flushSetupCommands() functions to
+	// execute commands that have been recorded so far
+	VkCommandBuffer createSingleUseTempCommandBuffer() {
+		// create a temporary command buffer to perform the command
+		// we could use a separate command pool, because the implementation may be
+		// able to apply memory allocation optimizations for short-lived buffers
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandPool = commandPool_;
+		allocInfo.commandBufferCount = 1;
+
+		VkCommandBuffer tempCommandBuffer;
+		vkAllocateCommandBuffers(logicalDevice_, &allocInfo, &tempCommandBuffer);
+
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; // we'll only be using this command buffer once, and wait until the copy has finished to return from this function
+
+		vkBeginCommandBuffer(tempCommandBuffer, &beginInfo);
+
+		return tempCommandBuffer;
+	}
+
+	void endSingleUseTempCommandBuffer(VkCommandBuffer tempCommandBuffer) {
+		vkEndCommandBuffer(tempCommandBuffer);
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &tempCommandBuffer;
+
+		vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(graphicsQueue_);
+
+		vkFreeCommandBuffers(logicalDevice_, commandPool_, 1, &tempCommandBuffer);
+	}
+
 	// **************************************************************************
 	// * Semaphores and Fences
 	// **************************************************************************
@@ -1828,6 +1874,313 @@ struct Renderer {
 		}
 	}
 
+	// **************************************************************************
+	// * Texture Image
+	// **************************************************************************
+
+	void createTextureImage() {
+		// load the image with stb
+		int textureWidth;
+		int textureHeight;
+		int textureChannels;
+
+		stbi_uc* pixels = stbi_load(
+				"textures/statue.jpg",
+				&textureWidth,
+				&textureHeight,
+				&textureChannels,
+				STBI_rgb_alpha); // force the image to be loaded with an alpha channel (4 bytes per pixel)
+
+		if (!pixels) {
+			throw std::runtime_error("failed to load texture image");
+		}
+
+		// set up the staging buffer
+		VkDeviceSize imageSize = textureWidth * textureHeight * 4;
+		VkBufferUsageFlags stagingBufferUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+		VkMemoryPropertyFlags stagingBufferDesiredMemoryProperties =
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | // we want memory we can map so we can write it from the CPU
+				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT; // use a memory heap that is host coherent, to avoid inconsistency between the mapped and allocated memory
+
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
+
+		this->createBufferAndAllocateMemory(
+				imageSize,
+				stagingBufferUsageFlags,
+				stagingBufferDesiredMemoryProperties,
+				stagingBuffer,
+				stagingBufferMemory);
+
+		// read pixel data into the buffer
+		void* imageData;
+		vkMapMemory(
+				logicalDevice_,
+				stagingBufferMemory,
+				0,
+				imageSize,
+				0,
+				&imageData);
+		memcpy(imageData, pixels, (size_t)imageSize);
+		vkUnmapMemory(logicalDevice_, stagingBufferMemory);
+
+		stbi_image_free(pixels);
+
+		// create the VkImage
+		uint32_t width = static_cast<uint32_t>(textureWidth);
+		uint32_t height = static_cast<uint32_t>(textureHeight);
+
+		VkFormat imageFormat = VK_FORMAT_R8G8B8A8_SRGB;  // must use the same format as pixels in the buffer
+		VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; // not usable by the GPU and the very first transition will discard the texels
+		VkImageUsageFlags usageFlags =
+				VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+				VK_IMAGE_USAGE_SAMPLED_BIT; // using in the shader to color the mesh
+		VkMemoryPropertyFlags desiredMemoryProperties =
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+		this->createImageAndAllocateMemory(
+				width,
+				height,
+				VK_FORMAT_R8G8B8A8_SRGB,
+				VK_IMAGE_TILING_OPTIMAL, // lets the implementation optimize access, alternative is laying out in row-major order, like the original array
+				initialLayout,
+				usageFlags,
+				desiredMemoryProperties,
+				textureImage_,
+				textureImageMemory_);
+
+		// perform copy from buffer to image
+		// we could just use VK_IMAGE_LAYOUT_GENERAL and skip all this
+		// transferring, but the performance is suboptimal
+		VkImageLayout intermediateLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+		this->transitionImageLayout(
+				textureImage_,
+				imageFormat,
+				initialLayout,
+				intermediateLayout);
+
+		this->copyBufferToImage(stagingBuffer, textureImage_, width, height);
+
+		// after the copy, we need one more transition to start sampling the
+		// texture image in the shader
+		this->transitionImageLayout(
+				textureImage_,
+				imageFormat,
+				intermediateLayout,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		vkDestroyBuffer(logicalDevice_, stagingBuffer, nullptr);
+		vkFreeMemory(logicalDevice_, stagingBufferMemory, nullptr);
+	}
+
+	void createImageAndAllocateMemory(
+			uint32_t width,
+			uint32_t height,
+			VkFormat format,
+			VkImageTiling tiling,
+			VkImageLayout initialLayout,
+			VkImageUsageFlags usageFlags,
+			VkMemoryPropertyFlags desiredMemoryProperties,
+			VkImage& image,
+			VkDeviceMemory& imageMemory) {
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D; // 3D images can be used to store voxel volumes
+		imageInfo.extent.width = width; // how many "texels" are on each axis (also, next two)
+		imageInfo.extent.height = height;
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = 1; // not using mipmapping for now
+		imageInfo.arrayLayers = 1; // not an array
+		imageInfo.format = format;
+		imageInfo.tiling = tiling;
+		imageInfo.initialLayout = initialLayout;
+		imageInfo.usage = usageFlags;
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT; // not using multisampling
+		imageInfo.flags = 0; // optional, there are some flags for sparse images
+
+		if (
+				vkCreateImage(
+						logicalDevice_,
+						&imageInfo,
+						nullptr,
+						&textureImage_) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture image");
+		}
+
+		// allocate memory for the image
+		VkMemoryRequirements imageMemoryRequirements;
+		vkGetImageMemoryRequirements(
+				logicalDevice_, image, &imageMemoryRequirements);
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = imageMemoryRequirements.size;
+		allocInfo.memoryTypeIndex = this->findMemoryType(
+				imageMemoryRequirements.memoryTypeBits,
+				desiredMemoryProperties);
+
+		if (
+				vkAllocateMemory(
+						logicalDevice_,
+						&allocInfo,
+						nullptr,
+						&imageMemory) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate texture image memory");
+		}
+
+		vkBindImageMemory(logicalDevice_, image, imageMemory, 0);
+	}
+
+	void transitionImageLayout(
+			VkImage image,
+			VkFormat format,
+			VkImageLayout oldLayout,
+			VkImageLayout newLayout) {
+		VkCommandBuffer tempCommandBuffer = this->createSingleUseTempCommandBuffer();
+
+		// barriers are primarily used for synchronization purposes
+		// we need to use this even though we call vkQueueWaitIdle to manually
+		// synchronize
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.oldLayout = oldLayout; // can use VK_IMAGE_LAYOUT_UNDEFINED if we don't care about the existing image contents
+		barrier.newLayout = newLayout;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // not using this to transfer queue family ownership
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.image = image;
+		// subresourceRange specifies the specific parts of the image
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier.subresourceRange.baseMipLevel = 0; // not using mipmapping
+		barrier.subresourceRange.levelCount = 1;
+		barrier.subresourceRange.baseArrayLayer = 0; // not an array
+		barrier.subresourceRange.layerCount = 1;
+		
+
+		VkPipelineStageFlags sourceStage;
+		VkPipelineStageFlags destinationStage;
+
+		// barrier.srcAccessMask: which types of operations that involve the resource must happen before the barrier
+		// barrier.dstAccessMask: which types of operations that involve the resource must wait on the barrier
+		if (
+				oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && 
+				newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+			// preparing to copy image pixels to buffer
+
+			// not waiting on anything
+			barrier.srcAccessMask = 0;
+			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+			// make transfer operations wait
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT; // a pseudo-stage where transfers happen
+		} else if (
+				oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && 
+				newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+			// preparing image to be read by fragment shader
+
+			// wait until after transfers are done
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+			// make fragment shader wait
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		} else {
+			throw std::invalid_argument("unsupported layer transition");
+		}
+
+		vkCmdPipelineBarrier(
+				tempCommandBuffer,
+				sourceStage, // pipeline stage operations should occur before the barrier
+				destinationStage, // operations that will wait on the barrier
+				0, // could be VK_DEPENDENCY_BY_REGION_BIT, which turns the barrier into a per-region condition
+				0, // array of memory barriers
+				nullptr,
+				0, // array of buffer memory barriers
+				nullptr,
+				1, // array of image memory barriers
+				&barrier);
+
+		this->endSingleUseTempCommandBuffer(tempCommandBuffer);
+	}
+
+	void copyBufferToImage(
+			VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+		VkCommandBuffer tempCommandBuffer = this->createSingleUseTempCommandBuffer();
+
+		VkBufferImageCopy region{};
+		region.bufferOffset = 0; // byte offset in the buffer at which pixel values start
+		region.bufferRowLength = 0; // specifies how pixels are laid out in memory; 0 value specifies tightly packed
+		region.bufferImageHeight = 0; // ditto
+
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.mipLevel = 0;
+		region.imageSubresource.baseArrayLayer = 0;
+		region.imageSubresource.layerCount = 1;
+
+		// which part o the image to copy
+		region.imageOffset = {0, 0, 0};
+		region.imageExtent = {width, height, 1};
+		
+		// we're just copying one chunk of pixels for the whole image, but we could
+		// specify an array of VkBufferImageCopy items to perform many different
+		// copies from this buffer to the image in one operation
+		vkCmdCopyBufferToImage(
+				tempCommandBuffer,
+				buffer,
+				image,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				1,
+				&region);
+
+		this->endSingleUseTempCommandBuffer(tempCommandBuffer);
+	}
+
+	void createTextureImageView() {
+		textureImageView_ = this->createImageView(
+				textureImage_, VK_FORMAT_R8G8B8A8_SRGB);
+	}
+
+	// samplers allow us to apply things like bilinear (mag) and anisotropic
+	// (min) filters, to prevent graphical nasties, and to specify the
+	// addressing mode (when texels are read beyond the image's bounds)
+	void createTextureSampler() {
+		VkSamplerCreateInfo samplerInfo{};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		samplerInfo.magFilter = VK_FILTER_LINEAR; // VK_FILTER_NEAREST would produce blocky artifacts when stretching the texture (more fragments than texels)
+		samplerInfo.minFilter = VK_FILTER_LINEAR; // VK_FILTER_NEAREST would produce fuzziness when there are more texels than fragments
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; // repeat is useful for tiling textures (e.g. on walls)
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.anisotropyEnable = VK_TRUE;
+
+		// get device max anisotropy
+		VkPhysicalDeviceProperties properties{};
+		vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+		samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy; // lower values improve performance, 16 is the max useful value
+
+		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK; // used if we were clamping instead of repeating
+		samplerInfo.unnormalizedCoordinates = VK_FALSE; // use normalized [0, 1) coordinates, rather than [0, textureWidth/Height)
+		samplerInfo.compareEnable = VK_FALSE; // if enabled, texels will first be compared to a value (used on shadow maps?)
+		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+		// mipmapping is another filter that can be applied
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerInfo.mipLodBias = 0.0f;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = 0.0f;
+
+		if (
+				vkCreateSampler(
+						logicalDevice_,
+						&samplerInfo,
+						nullptr,
+						&textureSampler_) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture sampler");
+		}
+	}
+
 	WindowHandler* windowHandler_;
 
 	VkInstance instance_;
@@ -1844,6 +2197,7 @@ struct Renderer {
 	std::vector<VkImage> swapChainImages_;
 	VkFormat swapChainImageFormat_;
 	VkExtent2D swapChainExtent_;
+
 	// image views describe how to access VkImages, and which part of the image to access
 	std::vector<VkImageView> swapChainImageViews_;
 	std::vector<VkFramebuffer> swapChainFramebuffers_;
@@ -1882,6 +2236,10 @@ struct Renderer {
 	std::vector<VkBuffer> uniformBuffers_;
 	std::vector<VkDeviceMemory> uniformBuffersMemory_;
 
-	// pointer to mapped buffer CPU accessible memory (see createVertexBuffer() and drawFrame())
-	void* vertexData_;
+	// Image for texture handling
+	VkImage textureImage_;
+	VkDeviceMemory textureImageMemory_;
+
+	VkImageView textureImageView_;
+	VkSampler textureSampler_;
 };
