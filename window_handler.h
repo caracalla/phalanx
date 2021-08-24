@@ -8,8 +8,8 @@
 #include <vector>
 
 
-const int WINDOW_WIDTH = 400;
-const int WINDOW_HEIGHT = 400;
+const int WINDOW_WIDTH = 800;
+const int WINDOW_HEIGHT = 600;
 
 
 struct WindowHandler {

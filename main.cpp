@@ -19,10 +19,10 @@
 #include <vector>
 
 
-uint32_t fps = 0;
-std::chrono::steady_clock::time_point lastPrintTime;
-
 void maybeLogFPS() {
+	static auto lastPrintTime = std::chrono::steady_clock::now();
+	static uint32_t fps = 0;
+
 	fps++;
 	auto now = std::chrono::steady_clock::now();
 	auto elapsedTime = now - lastPrintTime;
@@ -36,31 +36,8 @@ void maybeLogFPS() {
 
 
 
-constexpr double pi = 3.14159265358979323846;
-constexpr double one_twenty = 2 * pi / 3;
-constexpr double two_forty = 2 * one_twenty;
-
-double calculateAngle(std::chrono::microseconds frameDuration) {
-	// the triangle should do a full rotation every 5 seconds
-	constexpr int FIVE_SECONDS = 5 * 1000000;
-	return 2 * pi * frameDuration.count() / FIVE_SECONDS;
-}
-
-
-
 int main() {
-	// for maybeLogFPS
-	lastPrintTime = std::chrono::steady_clock::now();
-
-	auto lastFrameTime = std::chrono::steady_clock::now();
-	double angle = 0.0;
-
 	std::vector<Vertex> vertices = {
-		// original triangle
-		// {{ 0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // top
-		// {{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}}, // right
-		// {{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}} // left
-
 		// first rectangle
 		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
 		{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
@@ -84,23 +61,6 @@ int main() {
 		Renderer renderer(&windowHandler, &vertices, &indices);
 
 		while (renderer.isRunning()) {
-			// auto now = std::chrono::steady_clock::now();
-			// auto frameDuration =
-			// 		std::chrono::duration_cast<std::chrono::microseconds>(now - lastFrameTime);
-			// lastFrameTime = now;
-
-			// angle += calculateAngle(frameDuration);
-
-			// // make it spin!
-			// vertices[0].pos.x = sin(angle);
-			// vertices[0].pos.y = cos(angle);
-
-			// vertices[1].pos.x = sin(angle + two_forty);
-			// vertices[1].pos.y = cos(angle + two_forty);
-
-			// vertices[2].pos.x = sin(angle + one_twenty);
-			// vertices[2].pos.y = cos(angle + one_twenty);
-
 			windowHandler.pollEvents();
 			renderer.draw();
 			maybeLogFPS();
