@@ -8,23 +8,101 @@
 #include <vector>
 
 
-const int WINDOW_WIDTH = 800;
-const int WINDOW_HEIGHT = 600;
+const int INITIAL_WINDOW_WIDTH = 800;
+const int INITIAL_WINDOW_HEIGHT = 600;
+
+
+struct KeyStates {
+	bool forward = false;
+	bool reverse = false;
+	bool left = false;
+	bool right = false;
+	bool rise = false;
+	bool fall = false;
+};
+
+struct MouseState {
+	double xOffset = 0;
+	double yOffset = 0;
+
+	void reset() {
+		// prevent drift from old inputs sticking around
+		xOffset = 0;
+		yOffset = 0;
+	}
+};
+
+
+double mouseLastXpos = INITIAL_WINDOW_WIDTH / 2;
+double mouseLastYpos = INITIAL_WINDOW_HEIGHT / 2;
+bool firstMouseMovement = true;
 
 
 struct WindowHandler {
-	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-		auto self = reinterpret_cast<WindowHandler*>(glfwGetWindowUserPointer(window));
+	static void framebufferResizeCallback(
+				GLFWwindow* window, int width, int height) {
+		auto self = reinterpret_cast<WindowHandler*>(
+				glfwGetWindowUserPointer(window));
 		self->framebufferResized_ = true;
+
+		// reset last mouse position
+		mouseLastXpos = width / 2;
+		mouseLastYpos = height / 2;
 	}
 
-	static void keyPressCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-		auto self = reinterpret_cast<WindowHandler*>(glfwGetWindowUserPointer(window));
+	static void keyPressCallback(
+				GLFWwindow* window, int key, int scancode, int action, int mods) {
+		auto self = reinterpret_cast<WindowHandler*>(
+				glfwGetWindowUserPointer(window));
+
+		bool pressed = action != GLFW_RELEASE;
+
+		switch(key) {
+			case GLFW_KEY_W:
+				self->keyStates_.forward = pressed;
+				break;
+			case GLFW_KEY_S:
+				self->keyStates_.reverse = pressed;
+				break;
+			case GLFW_KEY_A:
+				self->keyStates_.left = pressed;
+				break;
+			case GLFW_KEY_D:
+				self->keyStates_.right = pressed;
+				break;
+			case GLFW_KEY_Q:
+				self->keyStates_.rise = pressed;
+				break;
+			case GLFW_KEY_E:
+				self->keyStates_.fall = pressed;
+				break;
+			default:
+				break;
+		}
 
 		if (key == GLFW_KEY_R && action == GLFW_PRESS) {
 			std::cout << "pressed the r key\n";
 			self->shouldRecreateSwapChain_ = true;
 		}
+	}
+
+	static void mousePositionCallback(
+			GLFWwindow* window, double xpos, double ypos) {
+		if (firstMouseMovement) {
+			mouseLastXpos = xpos;
+			mouseLastYpos = ypos;
+			firstMouseMovement = false;
+			return;
+		}
+
+		auto self = reinterpret_cast<WindowHandler*>(
+				glfwGetWindowUserPointer(window));
+
+		self->mouseState_.xOffset = (xpos - mouseLastXpos) / 10;
+		self->mouseState_.yOffset = (ypos - mouseLastYpos) / 10;
+
+		mouseLastXpos = xpos;
+		mouseLastYpos = ypos;
 	}
 
 	WindowHandler() {
@@ -33,6 +111,10 @@ struct WindowHandler {
 		glfwSetWindowUserPointer(window_, this);
 		glfwSetFramebufferSizeCallback(window_, framebufferResizeCallback);
 		glfwSetKeyCallback(window_, keyPressCallback);
+
+		// capture mouse
+		glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetCursorPosCallback(window_, mousePositionCallback);
 	}
 
 	GLFWwindow* createWindow() {
@@ -41,8 +123,8 @@ struct WindowHandler {
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
 		return glfwCreateWindow(
-			WINDOW_WIDTH,
-			WINDOW_HEIGHT,
+			INITIAL_WINDOW_WIDTH,
+			INITIAL_WINDOW_HEIGHT,
 			"Phalanx",
 			nullptr,
 			nullptr);
@@ -99,6 +181,7 @@ struct WindowHandler {
 	}
 
 	void pollEvents() {
+		mouseState_.reset();
 		glfwPollEvents();
 	}
 
@@ -111,7 +194,18 @@ struct WindowHandler {
 		glfwTerminate();
 	}
 
+	KeyStates& getKeyStates() {
+		return keyStates_;
+	}
+
+	MouseState& getMouseState() {
+		return mouseState_;
+	}
+
 	GLFWwindow* window_;
 	bool framebufferResized_ = false;
 	bool shouldRecreateSwapChain_ = false;
+
+	KeyStates keyStates_;
+	MouseState mouseState_;
 };

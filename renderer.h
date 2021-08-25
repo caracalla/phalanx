@@ -1,9 +1,6 @@
 #pragma once
 
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // use 0.0 to 1.0 instead of -1.0 to 1.0
 #include <glm/glm.hpp>
@@ -11,7 +8,9 @@
 
 #include <vulkan/vulkan.h>
 
+#include "model.h"
 #include "shader_loader.h"
+#include "texture.h"
 #include "vertex.h"
 #include "window_handler.h"
 
@@ -134,11 +133,9 @@ struct SwapChainSupportDetails {
 struct Renderer {
 	Renderer(
 			WindowHandler* windowHandler,
-			std::vector<Vertex>* vertices,
-			std::vector<uint16_t>* indices) {
+			Model* model) {
 		this->windowHandler_ = windowHandler;
-		this->vertices_ = vertices;
-		this->indices_ = indices;
+		this->model_ = model;
 		this->initVulkan();
 	}
 
@@ -1457,7 +1454,7 @@ struct Renderer {
 
 	void createVertexBuffer() {
 		// set up the staging buffer
-		VkDeviceSize bufferSize = sizeof((*vertices_)[0]) * vertices_->size();
+		VkDeviceSize bufferSize = sizeof(model_->vertices[0]) * model_->vertices.size();
 		VkBufferUsageFlags stagingBufferUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		VkMemoryPropertyFlags stagingBufferDesiredMemoryProperties =
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | // we want memory we can map so we can write it from the CPU
@@ -1484,7 +1481,7 @@ struct Renderer {
 				0, // flags
 				&vertexData);
 
-		memcpy(vertexData, vertices_->data(), (size_t)bufferSize);
+		memcpy(vertexData, model_->vertices.data(), (size_t)bufferSize);
 
 		vkUnmapMemory(logicalDevice_, stagingBufferMemory);
 
@@ -1510,7 +1507,7 @@ struct Renderer {
 	}
 
 	void createIndexBuffer() {
-		VkDeviceSize bufferSize = sizeof((*indices_)[0]) * indices_->size();
+		VkDeviceSize bufferSize = sizeof(model_->indices[0]) * model_->indices.size();
 		VkBufferUsageFlags stagingBufferUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		VkMemoryPropertyFlags stagingBufferDesiredMemoryProperties =
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
@@ -1537,7 +1534,7 @@ struct Renderer {
 				0, // flags
 				&indexData);
 
-		memcpy(indexData, indices_->data(), (size_t)bufferSize);
+		memcpy(indexData, model_->indices.data(), (size_t)bufferSize);
 
 		vkUnmapMemory(logicalDevice_, stagingBufferMemory);
 
@@ -1594,19 +1591,49 @@ struct Renderer {
 
 		UniformBufferObject ubo{};
 
-		// rotate the geometry 90 degrees per second
+		// rotate the geometry 15 degrees per second
 		ubo.model =
 				glm::rotate(
 						glm::mat4(1.0f), // existing transformation (in this case, an identity matrix)
-						time * glm::radians(90.0f), // rotation angle
+						0.0f, // time * glm::radians(15.0f), // rotation angle
 						glm::vec3(0.0f, 0.0f, 1.0f)); // rotation axis
 
-		// look at the geometry from above, at a 45 degree angle
-		ubo.view =
-				glm::lookAt(
-						glm::vec3(2.0f, 2.0f, 2.0f), // eye position
-						glm::vec3(0.0f, 0.0f, 0.0f), // center position
-						glm::vec3(0.0f, 0.0f, 1.0f)); // up axis
+		const float cameraSpeed = 0.01f;
+
+		static glm::vec3 cameraPosition = glm::vec3(2.0f, 2.0f, 2.0f);
+		static glm::vec3 cameraFront = glm::vec3(-2.0f, -2.0f, -2.0f);
+		static glm::vec3 cameraUp = glm::vec3(0.0f, 0.0f, 1.0f);
+
+		// use keyboard keys to update camera position
+		auto keys = windowHandler_->getKeyStates();
+
+		if (keys.forward) { cameraPosition += cameraSpeed * cameraFront; }
+		if (keys.reverse) { cameraPosition -= cameraSpeed * cameraFront; }
+		if (keys.left) { cameraPosition -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; }
+		if (keys.right) { cameraPosition += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; }
+		if (keys.rise) { cameraPosition.z += cameraSpeed; }
+		if (keys.fall) { cameraPosition.z -= cameraSpeed; }
+
+		// use mouse movement to update camera direction
+		auto mouse = windowHandler_->getMouseState();
+
+		static double yaw = 225.0f;
+		static double pitch = -35.26f;
+
+		yaw -= mouse.xOffset;
+		pitch -= mouse.yOffset;
+
+		if (pitch > 89.0f) { pitch = 89.0f; }
+		if (pitch < -89.0f) { pitch = -89.0f; }
+
+		glm::vec3 direction{-2.0f, -2.0f, -2.0f};
+		direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+		direction.z = sin(glm::radians(pitch));
+		direction.y = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+		cameraFront = glm::normalize(direction);
+
+		ubo.view = glm::lookAt(
+				cameraPosition, cameraPosition + cameraFront, cameraUp);
 
 		// use a perspective projection with a 45 degree vertical field of view
 		ubo.projection =
@@ -1830,7 +1857,7 @@ struct Renderer {
 					commandBuffers_[i],
 					indexBuffer_, // there can only be one
 					0, // byte offset into buffer
-					VK_INDEX_TYPE_UINT16); // could also be uint32
+					VK_INDEX_TYPE_UINT32); // size of each index in model_->indices
 
 			vkCmdBindDescriptorSets(
 					commandBuffers_[i],
@@ -1842,18 +1869,10 @@ struct Renderer {
 					0, // number of items in the below array
 					nullptr); // array of offsets that are used for dynamic descriptors (not used yet)
 
-			// when not using an index buffer:
-			// vkCmdDraw(
-			// 		commandBuffers_[i],
-			// 		static_cast<uint32_t>(vertices_->size()), // vertex count
-			// 		1, // instance count (not using instanced rendering here)
-			// 		0, // first vertex
-			// 		0); // first instance
-
 			// using an index buffer:
 			vkCmdDrawIndexed(
 					commandBuffers_[i],
-					static_cast<uint32_t>(indices_->size()), // number of indices
+					static_cast<uint32_t>(model_->indices.size()), // number of indices
 					1, // number of instances (not using instances, so just 1 for now)
 					0, // offset into the index buffer
 					0, // offset to add to the indices in the index buffer
@@ -1964,24 +1983,11 @@ struct Renderer {
 	// **************************************************************************
 
 	void createTextureImage() {
-		// load the image with stb
-		int textureWidth;
-		int textureHeight;
-		int textureChannels;
-
-		stbi_uc* pixels = stbi_load(
-				"textures/statue.jpg",
-				&textureWidth,
-				&textureHeight,
-				&textureChannels,
-				STBI_rgb_alpha); // force the image to be loaded with an alpha channel (4 bytes per pixel)
-
-		if (!pixels) {
-			throw std::runtime_error("failed to load texture image");
-		}
+		Texture* texture = model_->texture;
 
 		// set up the staging buffer
-		VkDeviceSize imageSize = textureWidth * textureHeight * 4;
+		// VkDeviceSize imageSize = textureWidth * textureHeight * 4;
+		VkDeviceSize imageSize = texture->size;
 		VkBufferUsageFlags stagingBufferUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		VkMemoryPropertyFlags stagingBufferDesiredMemoryProperties =
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | // we want memory we can map so we can write it from the CPU
@@ -2006,14 +2012,8 @@ struct Renderer {
 				imageSize,
 				0,
 				&imageData);
-		memcpy(imageData, pixels, (size_t)imageSize);
+		memcpy(imageData, texture->getPixels(), (size_t)imageSize);
 		vkUnmapMemory(logicalDevice_, stagingBufferMemory);
-
-		stbi_image_free(pixels);
-
-		// create the VkImage
-		uint32_t width = static_cast<uint32_t>(textureWidth);
-		uint32_t height = static_cast<uint32_t>(textureHeight);
 
 		VkFormat imageFormat = VK_FORMAT_R8G8B8A8_SRGB;  // must use the same format as pixels in the buffer
 		VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; // not usable by the GPU and the very first transition will discard the texels
@@ -2024,8 +2024,8 @@ struct Renderer {
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
 		this->createImageAndAllocateMemory(
-				width,
-				height,
+				texture->width,
+				texture->height,
 				VK_FORMAT_R8G8B8A8_SRGB,
 				VK_IMAGE_TILING_OPTIMAL, // lets the implementation optimize access, alternative is laying out in row-major order, like the original array
 				initialLayout,
@@ -2045,7 +2045,8 @@ struct Renderer {
 				initialLayout,
 				intermediateLayout);
 
-		this->copyBufferToImage(stagingBuffer, textureImage_, width, height);
+		this->copyBufferToImage(
+				stagingBuffer, textureImage_, texture->width, texture->height);
 
 		// after the copy, we need one more transition to start sampling the
 		// texture image in the shader
@@ -2407,8 +2408,7 @@ struct Renderer {
 	size_t currentFrame_ = 0;
 
 	// original vertex and index data, provided by the instance owner
-	std::vector<Vertex>* vertices_;
-	std::vector<uint16_t>* indices_;
+	Model* model_;
 
 	// device-side vertex data, resident in vertexBufferMemory_
 	VkBuffer vertexBuffer_;

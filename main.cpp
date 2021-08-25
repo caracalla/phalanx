@@ -9,7 +9,9 @@
 #endif
 
 
+#include "model.h"
 #include "renderer.h"
+#include "texture.h"
 #include "vertex.h"
 #include "window_handler.h"
 
@@ -37,28 +39,34 @@ void maybeLogFPS() {
 
 
 int main() {
-	std::vector<Vertex> vertices = {
-		// first rectangle
-		{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
-		{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
-		{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom right
-		{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}, // bottom left
+	// Texture statueTexture = Texture::load("textures/statue.jpg");
+	// Model rectanglesModel;
+	// rectanglesModel.texture = &statueTexture;
+	// rectanglesModel.vertices = {
+	// 	// first rectangle
+	// 	{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
+	// 	{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
+	// 	{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom right
+	// 	{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}, // bottom left
 
-		// second rectangle
-		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
-		{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
-		{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom right
-		{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}} // bottom left
-	};
+	// 	// second rectangle
+	// 	{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // top left
+	// 	{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, // top right
+	// 	{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}, // bottom right
+	// 	{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}} // bottom left
+	// };
+	// rectanglesModel.indices = {
+	// 	0, 1, 2, 2, 3, 0, // first rectangle
+	// 	4, 5, 6, 6, 7, 4 // second rectangle
+	// };
 
-	std::vector<uint16_t> indices = {
-		0, 1, 2, 2, 3, 0, // first rectangle
-		4, 5, 6, 6, 7, 4 // second rectangle
-	};
+	Texture vikingRoomTexture = Texture::load("textures/viking_room.png");
+	Model vikingRoomModel = Model::load("models/viking_room.obj");
+	vikingRoomModel.texture = &vikingRoomTexture;
 
 	try {
 		WindowHandler windowHandler{};
-		Renderer renderer(&windowHandler, &vertices, &indices);
+		Renderer renderer(&windowHandler, &vikingRoomModel);
 
 		while (renderer.isRunning()) {
 			windowHandler.pollEvents();
