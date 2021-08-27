@@ -18,6 +18,7 @@ void main() {
   // use the supplied texture
   outColor = texture(texSampler, fragTexCoord);
 
-  // merge texture and color
-  // outColor = vec4(fragColor * texture(texSampler, fragTexCoord).rgb, 1.0);
+  // merge texture and some weird color
+  // vec3 pixelColor = vec3(gl_FragCoord.x / 800, gl_FragCoord.y / 600, 0.0);
+  // outColor = vec4(pixelColor * texture(texSampler, fragTexCoord).rgb, 1.0);
 }

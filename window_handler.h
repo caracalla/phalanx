@@ -3,6 +3,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "input.h"
+
 #include <iostream>
 #include <utility>
 #include <vector>
@@ -10,28 +12,6 @@
 
 const int INITIAL_WINDOW_WIDTH = 800;
 const int INITIAL_WINDOW_HEIGHT = 600;
-
-
-struct KeyStates {
-	bool forward = false;
-	bool reverse = false;
-	bool left = false;
-	bool right = false;
-	bool rise = false;
-	bool fall = false;
-};
-
-struct MouseState {
-	double xOffset = 0;
-	double yOffset = 0;
-
-	void reset() {
-		// prevent drift from old inputs sticking around
-		xOffset = 0;
-		yOffset = 0;
-	}
-};
-
 
 double mouseLastXpos = INITIAL_WINDOW_WIDTH / 2;
 double mouseLastYpos = INITIAL_WINDOW_HEIGHT / 2;
@@ -75,6 +55,9 @@ struct WindowHandler {
 				break;
 			case GLFW_KEY_E:
 				self->keyStates_.fall = pressed;
+				break;
+			case GLFW_KEY_ESCAPE:
+				glfwSetWindowShouldClose(window, true);
 				break;
 			default:
 				break;
@@ -194,11 +177,11 @@ struct WindowHandler {
 		glfwTerminate();
 	}
 
-	KeyStates& getKeyStates() {
+	Input::KeyStates& getKeyStates() {
 		return keyStates_;
 	}
 
-	MouseState& getMouseState() {
+	Input::MouseState& getMouseState() {
 		return mouseState_;
 	}
 
@@ -206,6 +189,6 @@ struct WindowHandler {
 	bool framebufferResized_ = false;
 	bool shouldRecreateSwapChain_ = false;
 
-	KeyStates keyStates_;
-	MouseState mouseState_;
+	Input::KeyStates keyStates_;
+	Input::MouseState mouseState_;
 };

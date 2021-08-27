@@ -161,10 +161,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="compile_shaders.bat" />
-    <None Include="shader.frag" />
-    <None Include="shader.vert" />
+    <None Include="shaders\shader.frag" />
+    <None Include="shaders\shader.vert" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="camera.h" />
+    <ClInclude Include="input.h" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="shader_loader.h" />
     <ClInclude Include="vertex.h" />

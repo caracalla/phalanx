@@ -8,6 +8,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include "camera.h"
 #include "model.h"
 #include "shader_loader.h"
 #include "texture.h"
@@ -133,8 +134,10 @@ struct SwapChainSupportDetails {
 struct Renderer {
 	Renderer(
 			WindowHandler* windowHandler,
+			Camera* camera,
 			Model* model) {
 		this->windowHandler_ = windowHandler;
+		this->camera_ = camera;
 		this->model_ = model;
 		this->initVulkan();
 	}
@@ -1598,42 +1601,9 @@ struct Renderer {
 						0.0f, // time * glm::radians(15.0f), // rotation angle
 						glm::vec3(0.0f, 0.0f, 1.0f)); // rotation axis
 
-		const float cameraSpeed = 0.01f;
-
-		static glm::vec3 cameraPosition = glm::vec3(2.0f, 2.0f, 2.0f);
-		static glm::vec3 cameraFront = glm::vec3(-2.0f, -2.0f, -2.0f);
-		static glm::vec3 cameraUp = glm::vec3(0.0f, 0.0f, 1.0f);
-
-		// use keyboard keys to update camera position
-		auto keys = windowHandler_->getKeyStates();
-
-		if (keys.forward) { cameraPosition += cameraSpeed * cameraFront; }
-		if (keys.reverse) { cameraPosition -= cameraSpeed * cameraFront; }
-		if (keys.left) { cameraPosition -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; }
-		if (keys.right) { cameraPosition += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; }
-		if (keys.rise) { cameraPosition.z += cameraSpeed; }
-		if (keys.fall) { cameraPosition.z -= cameraSpeed; }
-
-		// use mouse movement to update camera direction
-		auto mouse = windowHandler_->getMouseState();
-
-		static double yaw = 225.0f;
-		static double pitch = -35.26f;
-
-		yaw -= mouse.xOffset;
-		pitch -= mouse.yOffset;
-
-		if (pitch > 89.0f) { pitch = 89.0f; }
-		if (pitch < -89.0f) { pitch = -89.0f; }
-
-		glm::vec3 direction{-2.0f, -2.0f, -2.0f};
-		direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-		direction.z = sin(glm::radians(pitch));
-		direction.y = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-		cameraFront = glm::normalize(direction);
-
-		ubo.view = glm::lookAt(
-				cameraPosition, cameraPosition + cameraFront, cameraUp);
+		// update view based on camera
+		 ubo.view = glm::lookAt(
+		 		camera_->position, camera_->position + camera_->direction, camera_->up);
 
 		// use a perspective projection with a 45 degree vertical field of view
 		ubo.projection =
@@ -2368,6 +2338,10 @@ struct Renderer {
 	}
 
 	WindowHandler* windowHandler_;
+	Camera* camera_;
+	// original vertex and index data, provided by the instance owner
+	Model* model_;
+
 
 	VkInstance instance_;
 	VkDebugUtilsMessengerEXT debugMessenger_;
@@ -2406,9 +2380,6 @@ struct Renderer {
 	std::vector<VkFence> imagesInFlight_;
 
 	size_t currentFrame_ = 0;
-
-	// original vertex and index data, provided by the instance owner
-	Model* model_;
 
 	// device-side vertex data, resident in vertexBufferMemory_
 	VkBuffer vertexBuffer_;

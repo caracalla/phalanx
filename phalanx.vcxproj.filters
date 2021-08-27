@@ -23,10 +23,10 @@
     <None Include="compile_shaders.bat">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="shader.vert">
+    <None Include="shaders\shader.vert">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="shader.frag">
+    <None Include="shaders\shader.frag">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
@@ -41,6 +41,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vertex.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="camera.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="input.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -27,7 +27,6 @@ void main() {
 	// gl_VertexIndex contains current vertex index
 	// gl_Position is the output clip coordinate??
 
-	// gl_Position = vec4(inPosition, 0.0, 1.0);
 	gl_Position =
 			ubo.projection * ubo.view * ubo.model * vec4(inPosition, 1.0);
 
